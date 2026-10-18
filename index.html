@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpendWise Voice - Alexa+ Simulator</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Segoe UI, Arial, sans-serif; background: #0b1220; color: #e8eefc;
+         display: flex; justify-content: center; min-height: 100vh; }
+  .app { width: 100%; max-width: 560px; display: flex; flex-direction: column; height: 100vh; }
+  header { padding: 16px 20px; background: #111b33; border-bottom: 1px solid #22305a; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; font-size: 12px; color: #8fa3d6; }
+  .ring { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+          background: #00caff; margin-right: 8px; box-shadow: 0 0 10px #00caff; }
+  #chat { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 16px; line-height: 1.4; font-size: 15px; }
+  .user { align-self: flex-end; background: #2f5bea; border-bottom-right-radius: 4px; }
+  .bot { align-self: flex-start; background: #1a2644; border-bottom-left-radius: 4px; }
+  .badge { display: block; margin-top: 6px; font-size: 11px; color: #00caff; font-family: Consolas, monospace; }
+  .chips { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: #16213f; border: 1px solid #2a3a6b; color: #b9c8f2; padding: 6px 10px;
+          border-radius: 14px; font-size: 12px; cursor: pointer; }
+  .chip:hover { background: #1f2e58; }
+  .bar { display: flex; gap: 8px; padding: 12px 16px 16px; background: #111b33; border-top: 1px solid #22305a; }
+  input { flex: 1; padding: 12px 14px; border-radius: 22px; border: 1px solid #2a3a6b;
+          background: #0b1220; color: #e8eefc; font-size: 15px; outline: none; }
+  button { border: none; border-radius: 50%; width: 46px; height: 46px; cursor: pointer; font-size: 18px; }
+  #send { background: #2f5bea; color: white; }
+  #mic { background: #00caff; }
+  #mic.listening { background: #ff4d6d; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { transform: scale(1.12); } }
+  .note { text-align: center; font-size: 11px; color: #6f82b5; padding: 0 16px 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1><span class="ring"></span>SpendWise Voice</h1>
+    <p>Simulated Alexa+ experience &middot; powered by our MCP server</p>
+  </header>
+  <div id="chat"></div>
+  <div class="chips" id="chips"></div>
+  <div class="note">Tip: press the mic and speak (Chrome or Edge). Typing works too.</div>
+  <div class="bar">
+    <input id="input" placeholder="Say or type: I spent 800 on food today" autocomplete="off">
+    <button id="mic" title="Speak">&#127908;</button>
+    <button id="send" title="Send">&#10148;</button>
+  </div>
+</div>
+
+<script>
+const chat = document.getElementById('chat');
+const input = document.getElementById('input');
+const examples = [
+  "I spent 800 on food today",
+  "500 rupay petrol pe kharch kiye",
+  "How much did I spend this week?",
+  "Where did I spend the most this month?",
+  "Set food budget to 10000",
+  "Compare with last month",
+  "Give me insights",
+  "Delete last expense"
+];
+
+function addMsg(role, text, tool) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  d.textContent = text;
+  if (tool) {
+    const b = document.createElement('span');
+    b.className = 'badge';
+    b.textContent = 'MCP tool: ' + tool;
+    d.appendChild(b);
+  }
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-IN';
+  window.speechSynthesis.speak(u);
+}
+
+async function send(text) {
+  text = (text || input.value).trim();
+  if (!text) return;
+  input.value = '';
+  addMsg('user', text);
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json();
+    addMsg('bot', data.reply, data.tool);
+    speak(data.reply);
+  } catch (e) {
+    addMsg('bot', "Something went wrong. Please try again.");
+  }
+}
+
+document.getElementById('send').onclick = () => send();
+input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+const chips = document.getElementById('chips');
+examples.forEach(t => {
+  const c = document.createElement('span');
+  c.className = 'chip';
+  c.textContent = t;
+  c.onclick = () => send(t);
+  chips.appendChild(c);
+});
+
+// Mic (Web Speech API)
+const mic = document.getElementById('mic');
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) {
+  mic.onclick = () => addMsg('bot', "Voice input isn't supported in this browser. Please use Chrome or Edge, or type your message.");
+} else {
+  const rec = new SR();
+  rec.lang = 'en-IN';
+  rec.interimResults = false;
+  rec.onstart = () => mic.classList.add('listening');
+  rec.onend = () => mic.classList.remove('listening');
+  rec.onerror = () => addMsg('bot', "I couldn't hear you. Please try again or type your message.");
+  rec.onresult = e => send(e.results[0][0].transcript);
+  mic.onclick = () => rec.start();
+}
+
+addMsg('bot', "Hi! I'm SpendWise Voice. Tell me what you spent, or ask where your money went.");
+</script>
+</body>
+</html>

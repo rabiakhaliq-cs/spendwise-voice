@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+import json
 import uvicorn
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
@@ -40,6 +41,8 @@ def find_period(t):
 def parse(text):
     """Returns (tool_name, args, direct_reply)."""
     t = text.lower().replace(",", "").replace("khane", "khana")
+    words = {"ek": "1", "do": "2", "teen": "3", "paanch": "5", "panch": "5", "das": "10",
+             "hazaar": "000", "hazar": "000"}
     nums = re.findall(r"\d+(?:\.\d+)?", t)
     amount = float(nums[0]) if nums else None
 
@@ -120,8 +123,19 @@ async def chat(request):
 async def home(request):
     return HTMLResponse(Path("index.html").read_text(encoding="utf-8"))
 
+async def breakdown(request):
+    try:
+        text = await call_tool("category_breakdown", {"period": "month"})
+        return JSONResponse(json.loads(text))
+    except Exception:
+        return JSONResponse({})
 
-app = Starlette(routes=[Route("/", home), Route("/api/chat", chat, methods=["POST"])])
+
+app = Starlette(routes=[
+    Route("/", home),
+    Route("/api/chat", chat, methods=["POST"]),
+    Route("/api/breakdown", breakdown),
+])
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=5000)

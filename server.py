@@ -253,6 +253,20 @@ def get_insights(user_id: str = "demo_user") -> str:
 
     return " ".join(tips)
 
+@mcp.tool()
+def category_breakdown(period: str = "month", user_id: str = "demo_user") -> str:
+    """Return spending per category as JSON text (used by the dashboard)."""
+    import json
+    start, end = period_range(period)
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT category, SUM(amount) AS total FROM expenses "
+        "WHERE user_id = ? AND date(created_at) BETWEEN ? AND ? "
+        "GROUP BY category ORDER BY total DESC",
+        (user_id, start, end),
+    ).fetchall()
+    conn.close()
+    return json.dumps({r["category"]: r["total"] for r in rows})
 
 if __name__ == "__main__":
     init_db()

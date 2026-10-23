@@ -645,6 +645,33 @@ def weekly_summary(user_id: str = "demo_user") -> str:
     conn.close()
     return " ".join(parts)
 
+@mcp.tool()
+def dashboard_data(user_id: str = "demo_user") -> str:
+    """Read-only numbers for the dashboard (JSON text)."""
+    import json
+    ms, me = period_range("month")
+    ls, le = period_range("last_month")
+    conn = get_conn()
+    cats = conn.execute(
+        "SELECT category, SUM(amount) AS t FROM expenses WHERE user_id = ? "
+        "AND date(created_at) BETWEEN ? AND ? GROUP BY category ORDER BY t DESC",
+        (user_id, ms, me)).fetchall()
+    budgets = [{"category": b["category"], "limit": b["limit_amount"],
+                "spent": sum_for(conn, user_id, ms, me, b["category"])}
+               for b in conn.execute("SELECT category, limit_amount FROM budgets "
+                                     "WHERE user_id = ?", (user_id,)).fetchall()]
+    recent = [{"amount": r["amount"], "category": r["category"],
+               "note": r["note"] or "", "date": r["created_at"]}
+              for r in conn.execute("SELECT amount, category, note, created_at FROM expenses "
+                                    "WHERE user_id = ? ORDER BY id DESC LIMIT 8",
+                                    (user_id,)).fetchall()]
+    data = {"spent": sum_for(conn, user_id, ms, me),
+            "last_month": sum_for(conn, user_id, ls, le),
+            "breakdown": {c["category"]: c["t"] for c in cats},
+            "budgets": budgets, "recent": recent}
+    conn.close()
+    return json.dumps(data)
+
 if __name__ == "__main__":
     init_db()
     mcp.run(transport="streamable-http")

@@ -365,12 +365,19 @@ async def breakdown(request):
     except Exception:
         return JSONResponse({})
 
+async def overview(request):
+    try:
+        return JSONResponse(json.loads(await call_tool("dashboard_data", {})))
+    except Exception:
+        return JSONResponse({})
+
 
 app = Starlette(routes=[
     Route("/", home),
     Route("/api/chat", chat, methods=["POST"]),
     Route("/api/breakdown", breakdown),
     Route("/api/reminder", reminder),
+    Route("/api/overview", overview),
 ])
 
 if __name__ == "__main__":
